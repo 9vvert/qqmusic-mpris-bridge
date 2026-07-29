@@ -50,8 +50,7 @@ systemctl --user disable qqmusic-mpris-bridge.service
 
 ### NixOS Home Manager 
 
-这个仓库导出了 flake package 和 Home Manager module。它不需要被 Home Manager
-官方收录，你可以直接在自己的 flake 中引用。
+这个仓库导出了 flake package 和 Home Manager module。你可以直接在自己的 flake 中引用。
 
 在你的 `flake.nix` 中添加 input：
 
@@ -115,32 +114,38 @@ nix build github:9vvert/qqmusic-mpris-bridge
 #### Home Manager参数
 
 - `services.qqmusic-mpris-bridge.enable`
+
 Type：`bool`
 Default：`false`
 Description：是否启用 Home Manager 管理的用户级 systemd 服务。
 
 - `services.qqmusic-mpris-bridge.package`
+
 Type：`package`
 Default：当前 flake 构建出的 `qqmusic-mpris-bridge` package。
 Description：通常不需要修改。你可以用它覆盖成自己打包的版本。
 
 - `services.qqmusic-mpris-bridge.fallbackInterval`
+
 Type：`number`
 Default：`30`
 Description：是否启用低频兜底扫描间隔(单位秒)。正常情况下歌曲切换依靠 D-Bus 事件监听，并不需要设置该参数进行轮询.
 
 - `services.qqmusic-mpris-bridge.debounceMs`
+
 Type：`number`
 Default：`350`
 Description：收到 MPRIS 事件后延迟刷新的时间，单位毫秒。QQ 音乐切歌时可能连续发出多次不完整metadata，适当 debounce 可以避免读到中间状态。
 
 - `services.qqmusic-mpris-bridge.maxArtCacheItems`
+
 Type：`number` (Positive)
 Default：`10`
 Description：本地最多保留多少张封面缓存。服务会用一个 manifest 文件记录最近访问时间，并按
 LRU 方式删除最久未使用的封面。
 
 - `services.qqmusic-mpris-bridge.noctaliaPreference`
+
 Type：`bool`
 Default：`true`
 Description：是否请求 Noctalia 优先使用这个 bridge player。
@@ -244,4 +249,5 @@ LRU 访问时间。默认最多保留 10 张封面，可以通过命令行或 Ho
 
 ## 注意事项
 - 请勿同时用 `install.sh` 和 Home Manager 管理同一个`qqmusic-mpris-bridge.service`。
+
 - QQ 音乐原始 MPRIS 信息很有限，缺少 album、url、length、artUrl 时只能用title/artist 搜索；该工具会尽量避免错误匹配，但不能保证100%正确。
