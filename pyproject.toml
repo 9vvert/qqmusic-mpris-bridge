@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qqmusic-mpris-bridge"
+version = "0.1.0"
+description = "Publish QQMusic MPRIS metadata with resolved album artwork."
+requires-python = ">=3.10"
+dependencies = [
+  "dbus-next>=0.2.3",
+  "requests>=2.0",
+]
+
+[project.scripts]
+qqmusic-mpris-bridge = "qqmusic_mpris_bridge.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["qqmusic_mpris_bridge*"]
+

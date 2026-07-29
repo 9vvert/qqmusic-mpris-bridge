@@ -1,0 +1,14 @@
+[Unit]
+Description=QQMusic MPRIS artwork bridge
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/qqmusic-mpris-bridge
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

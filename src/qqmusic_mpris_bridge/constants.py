@@ -1,0 +1,15 @@
+MPRIS_PATH = "/org/mpris/MediaPlayer2"
+MPRIS_PREFIX = "org.mpris.MediaPlayer2."
+ROOT_IFACE = "org.mpris.MediaPlayer2"
+PLAYER_IFACE = "org.mpris.MediaPlayer2.Player"
+PROPS_IFACE = "org.freedesktop.DBus.Properties"
+DBUS_IFACE = "org.freedesktop.DBus"
+DBUS_DEST = "org.freedesktop.DBus"
+DBUS_PATH = "/org/freedesktop/DBus"
+NOCTALIA_MPRIS_DEST = "dev.noctalia.Mpris"
+NOCTALIA_MPRIS_PATH = "/dev/noctalia/Mpris"
+NOCTALIA_MPRIS_IFACE = "dev.noctalia.Mpris"
+BRIDGE_BUS_NAME = "org.mpris.MediaPlayer2.qqmusic_art_bridge"
+NO_TRACK = "/org/mpris/MediaPlayer2/TrackList/NoTrack"
+VALID_PLAYBACK_STATUS = {"Playing", "Paused", "Stopped"}
+
