@@ -26,6 +26,8 @@
       (toString cfg.debounceMs)
       "--art-sources"
       (concatStringsSep "," cfg.artSources)
+      "--max-art-cache-items"
+      (toString cfg.maxArtCacheItems)
     ]
     ++ lib.optional cfg.debug "--debug"
     ++ lib.optional (!cfg.noctaliaPreference) "--no-noctalia-preference"
@@ -60,6 +62,12 @@ in {
       type = types.number;
       default = 350;
       description = "Delay before refreshing after MPRIS events, in milliseconds.";
+    };
+
+    maxArtCacheItems = mkOption {
+      type = types.ints.positive;
+      default = 10;
+      description = "Maximum number of local artwork files kept in the LRU cache.";
     };
 
     noctaliaPreference = mkOption {

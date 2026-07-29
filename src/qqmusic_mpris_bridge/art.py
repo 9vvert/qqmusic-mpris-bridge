@@ -1,9 +1,12 @@
 import asyncio
 import hashlib
+import json
 import logging
 import re
+import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 import requests
 
@@ -38,10 +41,12 @@ def version_tags(value: str) -> set[str]:
 
 
 class AlbumArtResolver:
-    def __init__(self, cache_dir: Path, sources: list[str]) -> None:
+    def __init__(self, cache_dir: Path, sources: list[str], max_art_cache_items: int = 10) -> None:
         self.cache_dir = cache_dir
         self.art_dir = cache_dir / "art"
         self.art_dir.mkdir(parents=True, exist_ok=True)
+        self.manifest_path = cache_dir / "art-cache.json"
+        self.max_art_cache_items = max(1, max_art_cache_items)
         self.sources = sources
         self.session = requests.Session()
         self.session.headers.update(
@@ -68,7 +73,9 @@ class AlbumArtResolver:
 
         cache_key = (state.title, joined_artists(state.artists))
         if cache_key in self.memory_cache:
-            return self.memory_cache[cache_key]
+            art_url = self.memory_cache[cache_key]
+            self.touch_cached_art_url(art_url)
+            return art_url
 
         url = await asyncio.to_thread(self.find_art_url, state.title, state.artists)
         if not url:
@@ -78,6 +85,95 @@ class AlbumArtResolver:
         downloaded = await asyncio.to_thread(self.download_art_url, url)
         self.memory_cache[cache_key] = downloaded
         return downloaded
+
+    def read_cache_manifest(self) -> dict[str, dict[str, Any]]:
+        try:
+            data = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return {}
+        except Exception as exc:
+            logging.debug("failed to read art cache manifest: %s", exc)
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        return {str(key): value for key, value in data.items() if isinstance(value, dict)}
+
+    def write_cache_manifest(self, manifest: dict[str, dict[str, Any]]) -> None:
+        tmp = self.manifest_path.with_suffix(".tmp")
+        try:
+            tmp.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            tmp.replace(self.manifest_path)
+        except Exception as exc:
+            logging.debug("failed to write art cache manifest: %s", exc)
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    def record_art_access(self, url: str, target: Path) -> None:
+        digest = target.stem
+        now = time.time()
+        manifest = self.read_cache_manifest()
+        entry = manifest.get(digest, {})
+        manifest[digest] = {
+            "url": url or entry.get("url", ""),
+            "file": target.name,
+            "created_at": entry.get("created_at", now),
+            "accessed_at": now,
+        }
+        self.prune_art_cache(manifest)
+
+    def touch_cached_art_url(self, art_url: str) -> None:
+        if not art_url.startswith("file://"):
+            return
+        parsed = urlparse(art_url)
+        try:
+            target = Path(unquote(parsed.path)).resolve()
+            if target.parent == self.art_dir.resolve() and target.exists():
+                self.record_art_access("", target)
+        except OSError:
+            return
+
+    def prune_art_cache(self, manifest: dict[str, dict[str, Any]]) -> None:
+        for target in self.art_dir.glob("*.jpg"):
+            digest = target.stem
+            if digest in manifest:
+                continue
+            try:
+                accessed_at = target.stat().st_mtime
+            except OSError:
+                continue
+            manifest[digest] = {
+                "url": "",
+                "file": target.name,
+                "created_at": accessed_at,
+                "accessed_at": accessed_at,
+            }
+
+        live_entries: list[tuple[str, dict[str, Any], Path]] = []
+        for digest, entry in list(manifest.items()):
+            target = self.art_dir / str(entry.get("file") or f"{digest}.jpg")
+            if not target.exists():
+                manifest.pop(digest, None)
+                continue
+            live_entries.append((digest, entry, target))
+
+        live_entries.sort(key=lambda item: self.cache_entry_accessed_at(item[1]), reverse=True)
+        for digest, _entry, target in live_entries[self.max_art_cache_items :]:
+            try:
+                target.unlink(missing_ok=True)
+                logging.debug("pruned old art cache file=%s", target)
+            except OSError as exc:
+                logging.debug("failed to prune art cache file=%s error=%s", target, exc)
+            manifest.pop(digest, None)
+
+        self.write_cache_manifest(manifest)
+
+    def cache_entry_accessed_at(self, entry: dict[str, Any]) -> float:
+        try:
+            return float(entry.get("accessed_at") or 0)
+        except (TypeError, ValueError):
+            return 0
 
     def find_art_url(self, title: str, artists: list[str]) -> str:
         if "qqmusic" in self.sources:
@@ -268,6 +364,7 @@ class AlbumArtResolver:
         digest = hashlib.sha256(url.encode("utf-8", errors="ignore")).hexdigest()
         target = self.art_dir / f"{digest}.jpg"
         if target.exists() and target.stat().st_size > 0:
+            self.record_art_access(url, target)
             return target.resolve().as_uri()
 
         tmp = target.with_suffix(".tmp")
@@ -282,6 +379,7 @@ class AlbumArtResolver:
                 return ""
             tmp.write_bytes(response.content)
             tmp.replace(target)
+            self.record_art_access(url, target)
             return target.resolve().as_uri()
         except Exception as exc:
             logging.debug("art download failed url=%s error=%s", url, exc)

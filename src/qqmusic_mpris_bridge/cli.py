@@ -50,6 +50,17 @@ def env_float(name: str, default: float) -> float:
         return default
 
 
+def env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logging.warning("ignoring invalid %s=%r", name, raw)
+        return default
+
+
 def default_fallback_interval() -> float:
     if "QQMUSIC_MPRIS_BRIDGE_FALLBACK_INTERVAL" in os.environ:
         return env_float("QQMUSIC_MPRIS_BRIDGE_FALLBACK_INTERVAL", 30.0)
@@ -84,6 +95,12 @@ async def async_main() -> int:
         help="comma-separated artwork sources: qqmusic,itunes; qqmusic is authoritative when listed",
     )
     parser.add_argument(
+        "--max-art-cache-items",
+        type=int,
+        default=env_int("QQMUSIC_MPRIS_BRIDGE_MAX_ART_CACHE_ITEMS", 10),
+        help="maximum number of local artwork files to keep",
+    )
+    parser.add_argument(
         "--no-noctalia-preference",
         action="store_true",
         help="do not ask Noctalia to pin this bridge as active media player",
@@ -97,7 +114,11 @@ async def async_main() -> int:
 
     fallback_interval = args.poll_interval if args.poll_interval is not None else args.fallback_interval
     cache_dir = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "qqmusic-mpris-bridge"
-    resolver = AlbumArtResolver(cache_dir, parse_sources(args.art_sources))
+    resolver = AlbumArtResolver(
+        cache_dir,
+        parse_sources(args.art_sources),
+        max_art_cache_items=args.max_art_cache_items,
+    )
     bus = await MessageBus(bus_type=BusType.SESSION).connect()
     bridge = QQMusicMprisBridge(
         bus=bus,
@@ -127,4 +148,3 @@ def main() -> int:
         return asyncio.run(async_main())
     except KeyboardInterrupt:
         return 130
-
