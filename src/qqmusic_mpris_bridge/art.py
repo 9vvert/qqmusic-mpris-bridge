@@ -58,7 +58,7 @@ class AlbumArtResolver:
                 "Referer": "https://y.qq.com/",
             }
         )
-        self.memory_cache: dict[tuple[str, str], str] = {}
+        self.memory_cache: dict[tuple[str, str, str], str] = {}
 
     async def resolve(self, state: TrackState) -> str:
         original = local_art_url(state.original_art_url)
@@ -71,13 +71,13 @@ class AlbumArtResolver:
         if not state.title:
             return ""
 
-        cache_key = (state.title, joined_artists(state.artists))
+        cache_key = (state.title, joined_artists(state.artists), state.album)
         if cache_key in self.memory_cache:
             art_url = self.memory_cache[cache_key]
             self.touch_cached_art_url(art_url)
             return art_url
 
-        url = await asyncio.to_thread(self.find_art_url, state.title, state.artists)
+        url = await asyncio.to_thread(self.find_art_url, state.title, state.artists, state.album)
         if not url:
             self.memory_cache[cache_key] = ""
             return ""
@@ -175,9 +175,9 @@ class AlbumArtResolver:
         except (TypeError, ValueError):
             return 0
 
-    def find_art_url(self, title: str, artists: list[str]) -> str:
+    def find_art_url(self, title: str, artists: list[str], album: str = "") -> str:
         if "qqmusic" in self.sources:
-            url = self.find_qqmusic_art(title, artists)
+            url = self.find_qqmusic_art(title, artists, album)
             if url:
                 return url
             logging.debug("qqmusic art not found; skipping non-qqmusic fallback")
@@ -219,6 +219,18 @@ class AlbumArtResolver:
             return unique_nonempty([str(singer.get("name") or singer.get("title") or "") for singer in singers])
         return unique_nonempty([str(song.get("fsinger") or "")])
 
+    def qqmusic_album_names(self, song: dict[str, Any]) -> list[str]:
+        album = song.get("album", {}) if isinstance(song.get("album"), dict) else {}
+        return unique_nonempty(
+            [
+                str(album.get("name") or ""),
+                str(album.get("title") or ""),
+                str(song.get("albumname") or ""),
+                str(song.get("albumName") or ""),
+                str(song.get("falbum") or ""),
+            ]
+        )
+
     def qqmusic_display_title(self, song: dict[str, Any]) -> str:
         return str(song.get("title") or song.get("songname") or song.get("name") or song.get("fsong") or "")
 
@@ -229,7 +241,42 @@ class AlbumArtResolver:
             return ""
         return str(value).split("_", 1)[0]
 
-    def qqmusic_song_score(self, song: dict[str, Any], title: str, artists: list[str]) -> int:
+    def qqmusic_release_score(self, song: dict[str, Any], title: str, album: str) -> int:
+        candidate_albums = self.qqmusic_album_names(song)
+        if not candidate_albums:
+            logging.debug("qqmusic candidate rejected by missing album title=%r", self.qqmusic_display_title(song))
+            return 0
+
+        if album:
+            target_names = unique_nonempty([album, strip_bracketed_text(album)])
+        else:
+            target_names = unique_nonempty([title, strip_bracketed_text(title)])
+
+        for candidate in candidate_albums:
+            normalized_candidate = normalize_query_text(candidate)
+            for target in target_names:
+                normalized_target = normalize_query_text(target)
+                if not normalized_target:
+                    continue
+                if normalized_candidate == normalized_target:
+                    return 35
+                if contains_meaningful_text(normalized_candidate, normalized_target):
+                    return 30
+                if contains_meaningful_text(normalized_target, normalized_candidate):
+                    return 25
+                if text_similarity(candidate, target) >= 0.88:
+                    return 25
+
+        logging.debug(
+            "qqmusic candidate rejected by album evidence title=%r albums=%r target_album=%r target_title=%r",
+            self.qqmusic_display_title(song),
+            candidate_albums,
+            album,
+            title,
+        )
+        return 0
+
+    def qqmusic_song_score(self, song: dict[str, Any], title: str, artists: list[str], album: str = "") -> int:
         target_tags = version_tags(title)
         candidate_tags = version_tags(self.qqmusic_display_title(song))
         if candidate_tags - target_tags:
@@ -251,14 +298,18 @@ class AlbumArtResolver:
                 title_score = max(title_score, 100)
             elif plain_title and normalized == plain_title:
                 title_score = max(title_score, 90)
-            elif contains_meaningful_text(target_title, normalized) or contains_meaningful_text(
-                normalized, target_title
-            ):
-                title_score = max(title_score, 80)
-            elif text_similarity(candidate, title) >= 0.88:
+            elif text_similarity(candidate, title) >= 0.95:
                 title_score = max(title_score, 75)
+            elif plain_title and text_similarity(candidate, strip_bracketed_text(title)) >= 0.95:
+                title_score = max(title_score, 70)
 
         if title_score == 0:
+            logging.debug(
+                "qqmusic candidate rejected by title title=%r candidates=%r target_title=%r",
+                self.qqmusic_display_title(song),
+                self.qqmusic_song_titles(song),
+                title,
+            )
             return 0
 
         wanted_artists = [normalize_query_text(artist) for artist in artists if normalize_query_text(artist)]
@@ -279,9 +330,12 @@ class AlbumArtResolver:
 
         if wanted_artists and found_artists and artist_score == 0:
             return 0
-        return title_score + artist_score
+        release_score = self.qqmusic_release_score(song, title, album)
+        if release_score == 0:
+            return 0
+        return title_score + artist_score + release_score
 
-    def find_qqmusic_art(self, title: str, artists: list[str]) -> str:
+    def find_qqmusic_art(self, title: str, artists: list[str], album: str = "") -> str:
         best_score = 0
         best_album_mid = ""
         queries = self.qqmusic_queries(title, artists)
@@ -312,7 +366,7 @@ class AlbumArtResolver:
                 album_mid = self.qqmusic_album_mid(song)
                 if not album_mid:
                     continue
-                score = self.qqmusic_song_score(song, title, artists)
+                score = self.qqmusic_song_score(song, title, artists, album)
                 if score > best_score:
                     best_score = score
                     best_album_mid = album_mid
