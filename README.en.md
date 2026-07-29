@@ -8,6 +8,10 @@ The Linux version of QQMusic exposes MPRIS metadata without album art in many ca
 
 This tool starts a new MPRIS player, reads the original QQMusic MPRIS metadata, fills in `mpris:artUrl`, and lets MPRIS-compatible desktop components display album art.
 
+
+https://github.com/user-attachments/assets/caee3ffc-9663-457c-8d32-19107b662b02
+
+
 ## Install
 ### General Linux
 
