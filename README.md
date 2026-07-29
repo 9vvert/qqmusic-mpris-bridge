@@ -116,7 +116,9 @@ nix build github:9vvert/qqmusic-mpris-bridge
 - `services.qqmusic-mpris-bridge.enable`
 
 Type：`bool`
+
 Default：`false`
+
 Description：是否启用 Home Manager 管理的用户级 systemd 服务。
 
 - `services.qqmusic-mpris-bridge.package`
