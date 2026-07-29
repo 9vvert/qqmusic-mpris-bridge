@@ -122,31 +122,41 @@ Description: Whether to enable the user-level systemd service managed by Home Ma
 - `services.qqmusic-mpris-bridge.package`
 
 Type: `package`
+
 Default: The `qqmusic-mpris-bridge` package built by this flake.
+
 Description: Usually does not need to be changed. You can override it with your own package.
 
 - `services.qqmusic-mpris-bridge.fallbackInterval`
 
 Type: `number`
+
 Default: `30`
+
 Description: Whether to enable the low-frequency fallback scan interval, in seconds. Normally track changes are handled through D-Bus event listening, so this does not need to be set for polling.
 
 - `services.qqmusic-mpris-bridge.debounceMs`
 
 Type: `number`
+
 Default: `350`
+
 Description: Delay before refreshing after MPRIS events, in milliseconds. QQMusic may emit multiple incomplete metadata updates during track changes, and a suitable debounce can avoid reading an intermediate state.
 
 - `services.qqmusic-mpris-bridge.maxArtCacheItems`
 
 Type: `number` (Positive)
+
 Default: `10`
+
 Description: Maximum number of local album-art cache files to keep. The service records recent access time in a manifest file and removes the least recently used artwork by LRU.
 
 - `services.qqmusic-mpris-bridge.noctaliaPreference`
 
 Type: `bool`
+
 Default: `true`
+
 Description: Whether to ask Noctalia to prefer this bridge player.
 
 If you do not use Noctalia, or do not want it to automatically choose this player, set:
