@@ -8,6 +8,10 @@ linux qqmusic默认暴露的MPRIS metadata缺少封面字段，因此一些桌�
 
 该工具会启动一个新的MPRIS player，读取 QQ 音乐原始 MPRIS metadata，再补全 `mpris:artUrl`，让支持MPRIS的桌面组件可以显示封面。
 
+
+https://github.com/user-attachments/assets/caee3ffc-9663-457c-8d32-19107b662b02
+
+
 ## Install
 ### General Linux
 
